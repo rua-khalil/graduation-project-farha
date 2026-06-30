@@ -1,0 +1,194 @@
+================================================================================
+FARHA PLATFORM - BACKEND EXPLANATION FOR FLUTTER INTEGRATION
+================================================================================
+
+This document is designed to provide any AI or developer with a comprehensive overview of the Farha backend so they can write, modify, and integrate Flutter code on any editor.
+
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+- Project Name: Farha (An Event & Venue Booking Platform)
+- Backend Tech Stack: Node.js, Express.js, Prisma ORM, MySQL
+- Port: 3000 (Default)
+- Base URL Prefix: /api
+- Local IP Setup: 
+  - Android Emulator: http://10.0.2.2:3000/api
+  - iOS Simulator / Web: http://localhost:3000/api
+  - Physical Mobile Devices: http://<your-local-ip-address>:3000/api
+
+--------------------------------------------------------------------------------
+2. DATABASE ARCHITECTURE (PRISMA SCHEMA)
+--------------------------------------------------------------------------------
+The database consists of the following primary tables (models):
+
+- users:
+  - u_id (Int, Primary Key, Autoincrement)
+  - r_id (Int, Foreign Key to roles)
+  - f_name (String)
+  - l_name (String)
+  - email (String, Unique)
+  - password_hash (String)
+  - status (String, default: "active")
+  - phone_number (String, Nullable)
+  - created_date (DateTime)
+
+- services (Venues/Services managed by Vendors):
+  - s_id (Int, Primary Key, Autoincrement)
+  - vendor_id (Int, Foreign Key to vendors)
+  - c_id (Int, Foreign Key to categories)
+  - name (String)
+  - description (String, Nullable)
+  - price (Decimal, default: 0.00)
+  - available (Boolean, default: true)
+  - capacity (String, Nullable)
+  - location (String, Nullable)
+  - is_deleted (Boolean, default: false)
+
+- bookings:
+  - b_id (Int, Primary Key, Autoincrement)
+  - u_id (Int, Foreign Key to users)
+  - s_id (Int, Foreign Key to services)
+  - booking_date (DateTime)
+  - duration (Int, Nullable)
+  - status (String, default: "pending" - e.g., pending, confirmed, completed)
+  - sum_total (Decimal, Nullable)
+
+- categories:
+  - c_id (Int, Primary Key, Autoincrement)
+  - name (String, Unique)
+  - description (String, Nullable)
+
+- payments:
+  - p_id (Int, Primary Key, Autoincrement)
+  - b_id (Int, Foreign Key to bookings, Unique)
+  - vendor_id (Int, Foreign Key to vendors)
+  - method (String)
+  - payment_date (DateTime)
+
+- roles:
+  - r_id (Int, Primary Key, Autoincrement)
+  - r_name (String, Unique - e.g., "admin", "vendor", "user")
+
+- service_images:
+  - id (Int, Primary Key, Autoincrement)
+  - service_id (Int, Foreign Key to services)
+  - image_url (String)
+  - created_at (DateTime)
+
+- vendors:
+  - user_id (Int, Primary Key, links to users.u_id)
+  - bus_name (String)
+  - location (String, Nullable)
+  - description (String, Nullable)
+
+- favorites:
+  - f_id (Int, Primary Key, Autoincrement)
+  - u_id (Int, Foreign Key to users)
+  - s_id (Int, Foreign Key to services)
+  - created_at (DateTime)
+
+- reviews:
+  - r_id (Int, Primary Key, Autoincrement)
+  - u_id (Int, Foreign Key to users)
+  - s_id (Int, Foreign Key to services)
+  - booking_id (Int, Nullable)
+  - rating (Int)
+  - comment (String, Nullable)
+
+- messages:
+  - m_id (Int, Primary Key, Autoincrement)
+  - sender_id (Int, Foreign Key to users)
+  - receiver_id (Int, Foreign Key to users)
+  - content (String)
+  - is_read (Boolean, default: false)
+  - created_at (DateTime)
+
+- notifications:
+  - n_id (Int, Primary Key, Autoincrement)
+  - u_id (Int, Foreign Key to users)
+  - title (String)
+  - message (String)
+  - is_read (Boolean, default: false)
+  - created_at (DateTime)
+
+--------------------------------------------------------------------------------
+3. API ROUTING & ENDPOINTS
+--------------------------------------------------------------------------------
+Below is the list of endpoints. Note that routes marked with [AUTH] require the JWT token passed in the Authorization header as: `Authorization: Bearer <JWT_TOKEN>`
+
+A. AUTHENTICATION & USERS (/api/users)
+- GET /                   -> Get list of all users.
+- GET /:id                -> Get user by ID.
+- POST /                  -> Register a new user.
+- POST /login             -> Authenticate user. Returns: { token: "JWT...", user: { u_id, email, r_id, ... } }
+- PUT /:id        [AUTH]  -> Update user profile details.
+- DELETE /:id     [AUTH]  -> Delete a user profile.
+
+B. SERVICES / VENUES (/api/services)
+- GET /                   -> Get all active services/venues (supports search filters).
+- GET /:id                -> Get details of a service by ID.
+- POST /          [AUTH]  -> Create a service (Vendors only).
+- PUT /:id        [AUTH]  -> Update a service (Vendors only).
+- PATCH /:id/toggle [AUTH]-> Toggle service availability.
+- DELETE /:id     [AUTH]  -> Delete service.
+
+C. BOOKINGS (/api/bookings)
+- GET /           [AUTH]  -> Get all bookings (Admin/global view).
+- POST /          [AUTH]  -> Create a booking.
+- GET /user/:userId [AUTH]-> Get all bookings for a specific user.
+- GET /vendor/:vendorId [AUTH]-> Get all bookings assigned to a vendor.
+- GET /service/:serviceId/booked-dates -> Get list of booked/unavailable dates for calendar selection.
+- GET /:id        [AUTH]  -> Get details of a single booking.
+- PATCH /:id/status [AUTH]-> Update booking status (pending, confirmed, completed).
+- DELETE /:id     [AUTH]  -> Cancel/Delete booking.
+
+D. FAVORITES (/api/favorites)
+- GET /           [AUTH]  -> Get logged-in user's favorites list.
+- POST /          [AUTH]  -> Add a service/venue to favorites. Body: { s_id: <service_id> }
+- DELETE /:s_id   [AUTH]  -> Remove a service/venue from favorites.
+
+E. CATEGORIES (/api/categories)
+- GET /                   -> Get all service categories.
+- GET /:id                -> Get a specific category.
+- POST /          [AUTH]  -> Add new category (Admin).
+- PUT /:id        [AUTH]  -> Update category (Admin).
+- DELETE /:id     [AUTH]  -> Delete category (Admin).
+
+F. MESSAGES / CHAT (/api/messages)
+- POST /          [AUTH]  -> Send a chat message. Body: { receiver_id: <id>, content: "..." }
+- GET /conversation/:userId [AUTH] -> Get message history with a specific user.
+- PATCH /:id/read [AUTH]  -> Mark a message as read.
+
+G. FILE UPLOADS (/api/upload)
+- POST /          [AUTH]  -> Uploads an image. Needs multipart/form-data with field name "image". Returns: { imageUrl: "/uploads/filename.jpg" }
+
+--------------------------------------------------------------------------------
+4. HOW FLUTTER SHOULD CONSUME THIS BACKEND
+--------------------------------------------------------------------------------
+1. Storage of Tokens:
+   Use `flutter_secure_storage` to securely store the JWT token retrieved from `POST /api/users/login`.
+
+2. Network Request Configuration:
+   Set up a `Dio` or `http` wrapper class in Dart. 
+   Every protected request must include:
+   headers: {
+     'Authorization': 'Bearer $token',
+     'Content-Type': 'application/json',
+   }
+
+3. BaseUrl Configuration:
+   Define an AppConstants class:
+   ```dart
+   class AppConstants {
+     static const String baseUrl = 'http://10.0.2.2:3000/api'; // Android Emulator
+     // static const String baseUrl = 'http://localhost:3000/api'; // iOS / Web
+     // static const String baseUrl = 'http://<local-ip>:3000/api'; // Physical Device
+   }
+   ```
+
+4. Code Structure recommendation:
+   - lib/models/      -> Model classes mapping MySQL columns.
+   - lib/services/    -> ApiService class to execute GET/POST/PUT/DELETE requests.
+   - lib/providers/   -> State management files (e.g., AuthProvider, BookingProvider).
+
+================================================================================
